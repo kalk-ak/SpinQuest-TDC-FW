@@ -1,8 +1,6 @@
----------------------------------------------------------------------------------------------------------
---! \file top_1BRAM.vhd
---! \brief Wrapper around the top-level 64 channel (1 BRAM) TDC module since VHDL 2008 is not compatible with block design
---! \author Amitav Mitra, amitra3@jhu.edu
----------------------------------------------------------------------------------------------------------
+----------------------------------------------------------------------------------------------------------
+-- Wrapper around the top-level 32 channel TDC module since VHDL 2008 is not compatible with block design
+----------------------------------------------------------------------------------------------------------
 
 library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;

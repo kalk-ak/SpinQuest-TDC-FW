@@ -2,10 +2,10 @@
 --Copyright 2022-2024 Advanced Micro Devices, Inc. All Rights Reserved.
 ----------------------------------------------------------------------------------
 --Tool Version: Vivado v.2024.2 (lin64) Build 5239630 Fri Nov 08 22:34:34 MST 2024
---Date        : Fri Feb 20 12:36:12 2026
+--Date        : Wed Mar  5 18:41:08 2025
 --Host        : amitav-P15sG5 running 64-bit Ubuntu 24.04.2 LTS
---Command     : generate_target design_64ch_2BRAM_wrapper.bd
---Design      : design_64ch_2BRAM_wrapper
+--Command     : generate_target design_1_wrapper.bd
+--Design      : design_1_wrapper
 --Purpose     : IP block netlist
 ----------------------------------------------------------------------------------
 library IEEE;
@@ -14,25 +14,22 @@ library UNISIM;
 use UNISIM.VCOMPONENTS.ALL;
 entity design_64ch_2BRAM_wrapper is
   port (
-    mlvds_sync_clkRF : in STD_LOGIC;
-    mlvds_sync_trigger : in STD_LOGIC;
-    tdc_hit : in STD_LOGIC_VECTOR ( 0 to 63 )
+    tdc_hit : in STD_LOGIC_VECTOR ( 0 to 0 );
+    trigger : in STD_LOGIC
   );
 end design_64ch_2BRAM_wrapper;
 
 architecture STRUCTURE of design_64ch_2BRAM_wrapper is
-  component design_64ch_2BRAM is
+  component design_1 is
   port (
-    tdc_hit : in STD_LOGIC_VECTOR ( 0 to 63 );
-    mlvds_sync_clkRF : in STD_LOGIC;
-    mlvds_sync_trigger : in STD_LOGIC
+    trigger : in STD_LOGIC;
+    tdc_hit : in STD_LOGIC_VECTOR ( 0 to 0 )
   );
-  end component design_64ch_2BRAM;
+  end component design_1;
 begin
-design_64ch_2BRAM_i: component design_64ch_2BRAM
+design_1_i: component design_64ch_2BRAM
      port map (
-      mlvds_sync_clkRF => mlvds_sync_clkRF,
-      mlvds_sync_trigger => mlvds_sync_trigger,
-      tdc_hit(0 to 63) => tdc_hit(0 to 63)
+      tdc_hit(0) => tdc_hit(0),
+      trigger => trigger
     );
 end STRUCTURE;
