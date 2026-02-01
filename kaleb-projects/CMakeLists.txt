@@ -1,6 +1,9 @@
 # Version & Project Name
-cmake_minimum_required(VERSION 3.14)
+cmake_minimum_required(VERSION 3.23)			# Using modern cmake
 project(daq_server VERSION 0.01 LANGUAGES CXX)
+
+# Make sure that compile_comands.json is created to avoid LSP warnings
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Download all Dependencies automatically
 include(FetchContent)
@@ -13,10 +16,8 @@ FetchContent_MakeAvailable(cli11)
 
 
 
-# Define the Executable (The Target)
-add_executable(daq_server 
-	#TODO: Add executables here
-)
+# Define the Executable
+add_executable(daq_server)
 
 # Use C++ 17
 target_compile_features(daq_server PRIVATE cxx_std_17)
