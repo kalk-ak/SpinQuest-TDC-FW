@@ -5,8 +5,10 @@ project(daq_server VERSION 0.01 LANGUAGES CXX)
 # Make sure that compile_comands.json is created to avoid LSP warnings
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# Download all Dependencies automatically
+# ----------- DOWNLOAD ALL DEPENDENCIES AUTOMATICALLY ------------------
 include(FetchContent)
+
+# Download CLI11 for parsing args
 FetchContent_Declare(
   cli11
   GIT_REPOSITORY https://github.com/CLIUtils/CLI11
@@ -15,17 +17,32 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(cli11)
 
 
+# ---------------- END OF DOWNLOAD --------------------------------------
+
 
 # Define the Executable
 add_executable(daq_server)
+
+# HACK: This is risky as I am stating every file in src/ is to be included.
+# this can be Fixed later
+file(GLOB_RECURSE all_src_files CONFIGURE_DEPENDS "src/*" "src/*.cpp" "src/*.cxx" "src/*.h")
+target_sources(daq_server PRIVATE ${all_src_files})
+
+
+# TODO: separate source files as the project grows
+#
+# target_sources(daq_server PRIVATE
+#   src/main.cpp
+#   src/DAQServer.cpp
+# )
 
 # Use C++ 17
 target_compile_features(daq_server PRIVATE cxx_std_17)
 
 # Setup Includes
-# "Look in 'include/' for headers, but don't force this on others unless they link to me"
+# Go ahead and include the include/ folder
 target_include_directories(daq_server PRIVATE include)
 
-# 6. Link Libraries
+# Link Libraries
 # "I need CLI11 to build."
 target_link_libraries(daq_server PRIVATE CLI11::CLI11)
