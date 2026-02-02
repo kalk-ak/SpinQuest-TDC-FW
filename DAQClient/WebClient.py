@@ -16,7 +16,14 @@ from .State import State
 
 
 class Button:
-    def __init__(self, event: str, disable_on_startup: bool = False, tooltip: str = "",  bootstrap_icon: str = "", disable_on_reset: bool = None):
+    def __init__(
+        self,
+        event: str,
+        disable_on_startup: bool = False,
+        tooltip: str = "",
+        bootstrap_icon: str = "",
+        disable_on_reset: bool = None,
+    ):
         self.event = event
         self.disable_on_startup = disable_on_startup
         self.disabled = disable_on_startup
@@ -24,7 +31,7 @@ class Button:
         self.tooltip = tooltip
         if len(tooltip) == 0:
             self.tooltip = event
-        
+
         self.disable_on_reset = disable_on_reset
         if disable_on_reset == None:
             self.disable_on_reset = self.disable_on_startup
@@ -54,27 +61,26 @@ class Button:
         disable_on_startup = False
         tooltip = ""
         bootstrap_icon = ""
-        disable_on_reset = False 
+        disable_on_reset = False
 
-        if 'event' in input_dict:
-            event = input_dict['event']
+        if "event" in input_dict:
+            event = input_dict["event"]
         else:
             raise KeyError
 
-        if 'disable_on_startup' in input_dict:
-            disable_on_startup = input_dict['disable_on_startup']
+        if "disable_on_startup" in input_dict:
+            disable_on_startup = input_dict["disable_on_startup"]
 
-        if 'tooltip' in input_dict:
-            tooltip = input_dict['tooltip']
+        if "tooltip" in input_dict:
+            tooltip = input_dict["tooltip"]
 
-        if 'bootstrap_icon' in input_dict:
-            bootstrap_icon = input_dict['bootstrap_icon']
+        if "bootstrap_icon" in input_dict:
+            bootstrap_icon = input_dict["bootstrap_icon"]
 
-        if 'disable_on_reset' in input_dict:
-            disable_on_reset = input_dict['disable_on_reset']
-        elif 'disable_on_startup' in input_dict:
-            disable_on_reset = input_dict['disable_on_startup']
-
+        if "disable_on_reset" in input_dict:
+            disable_on_reset = input_dict["disable_on_reset"]
+        elif "disable_on_startup" in input_dict:
+            disable_on_reset = input_dict["disable_on_startup"]
 
         return cls(event, disable_on_startup, tooltip, bootstrap_icon, disable_on_reset)
 
@@ -86,62 +92,70 @@ class WebClient(Client):
         self.graph["labels"] = []
         self.graph["datasets"] = [{"label": "Event Rate", "data": []}]
         super().__init__(config_file_path, log_file_path)
-        self.config['web']['configuration_buttons'] = []
+        self.config["web"]["configuration_buttons"] = []
         self.flask_app = Flask(self.name)
         self.socketio.init_app(self.flask_app)
 
         for i in range(self.config["graph"]["window"]):
             self.graph["labels"].append(
-                (datetime.now()-timedelta(seconds=i)).strftime(self.config['time_display_format']))
+                (datetime.now() - timedelta(seconds=i)).strftime(
+                    self.config["time_display_format"]
+                )
+            )
             self.graph["datasets"][0]["data"].append(0)
 
-        @self.flask_app.route('/')
+        @self.flask_app.route("/")
         def main():
-            return render_template('monitor.html', async_mode=self.socketio.async_mode,
-                                   config=self.config)
+            return render_template(
+                "monitor.html", async_mode=self.socketio.async_mode, config=self.config
+            )
+
         self.buttons = []
-        
 
     def handshake(self):
         print("New Web Client")
         if self.background_task is None:
-            print('Starting Background Thread')
+            print("Starting Background Thread")
             self.background_task = self.start_background_task(
-                target=self.background_task)
-            
+                target=self.background_task
+            )
+
     def setup_events(self):
         super().setup_events()
         idx = 0
         event = "connect_backend"
         button = self.config["web"]["buttons"][event]
-        button['event'] = event
-        button['disable_on_startup'] = False
-        button['disable_on_reset'] = True
+        button["event"] = event
+        button["disable_on_startup"] = False
+        button["disable_on_reset"] = True
         self.buttons.append(Button.from_dict(button))
         self.config["web"]["buttons"][event] = button
         self.button_keys[event] = idx
         self.events.append(event)
-        self.config['web']['configuration_buttons'].append(button)
+        self.config["web"]["configuration_buttons"].append(button)
         idx += 1
         for event in self.backend.preparation_events:
             if event in self.config["web"]["buttons"]:
                 button = self.config["web"]["buttons"][event]
-                button['event'] = event
-                button['disable_on_startup'] = True
+                button["event"] = event
+                button["disable_on_startup"] = True
                 if idx == 1:
-                    button['disable_on_reset'] = False
+                    button["disable_on_reset"] = False
                 self.buttons.append(Button.from_dict(button))
                 self.button_keys[event] = idx
                 self.events.append(event)
-                self.config['web']['configuration_buttons'].append(button)
+                self.config["web"]["configuration_buttons"].append(button)
                 idx += 1
 
         for event in ["start", "pause", "stop", "reset"]:
             button = self.config["web"]["buttons"][event]
-            button['event'] = event
-            button['disable_on_startup'] = True
-            if (event == 'start' and len(self.config['web']['configuration_buttons']) == 1) or event=='reset':
-                button['disable_on_reset'] = False
+            button["event"] = event
+            button["disable_on_startup"] = True
+            if (
+                event == "start"
+                and len(self.config["web"]["configuration_buttons"]) == 1
+            ) or event == "reset":
+                button["disable_on_reset"] = False
             self.buttons.append(Button.from_dict(button))
             self.config["web"]["buttons"][event] = button
             self.button_keys[event] = idx
@@ -149,10 +163,13 @@ class WebClient(Client):
 
         for button in self.buttons[1:]:
             button.disable()
-        
-        self.log(LogItem("Loaded %d event types, of which %d are configuration events" % (len(self.events),len(self.config['web']['configuration_buttons']))))
 
-        
+        self.log(
+            LogItem(
+                "Loaded %d event types, of which %d are configuration events"
+                % (len(self.events), len(self.config["web"]["configuration_buttons"]))
+            )
+        )
 
     def get_button_status(self):
         return_dict = {}
@@ -160,7 +177,7 @@ class WebClient(Client):
             return_dict[button.event] = button.status()
         return return_dict
 
-    def update_button_status(self, event:str):
+    def update_button_status(self, event: str):
         if event == "reset":
             for button in self.buttons:
                 button.reset()
@@ -180,8 +197,11 @@ class WebClient(Client):
             for button in self.buttons:
                 button.disable()
             self.buttons[self.button_keys["reset"]].enable()
-            if event in self.backend.get_preparation_events() or event == "connect_backend":
-                self.buttons[self.button_keys[event]+1].enable()
+            if (
+                event in self.backend.get_preparation_events()
+                or event == "connect_backend"
+            ):
+                self.buttons[self.button_keys[event] + 1].enable()
             elif event == "start":
                 if "pause" in self.button_keys:
                     self.buttons[self.button_keys["pause"]].enable()
@@ -199,10 +219,16 @@ class WebClient(Client):
         return self.get_button_status()
 
     def status(self):
-        return_dict = {"buttons": self.get_button_status(),
-                       "autopilot": self.autopilot_on, "autopilot_settings": dict(self.autopilot), "connected": self.connected,
-                       "run_id": self.run_id, "spill_id": self.spill_id,
-                       "logs": self.log_entries, "graph": self.graph}
+        return_dict = {
+            "buttons": self.get_button_status(),
+            "autopilot": self.autopilot_on,
+            "autopilot_settings": dict(self.autopilot),
+            "connected": self.connected,
+            "run_id": self.run_id,
+            "spill_id": self.spill_id,
+            "logs": self.log_entries,
+            "graph": self.graph,
+        }
         print(return_dict)
         return return_dict
 
@@ -214,16 +240,15 @@ class WebClient(Client):
 
     def respond(self, event: str):
         self.update_button_status(event)
-        self.socketio.emit('response', {"event": event,
-                                        "status": self.status()})
+        self.socketio.emit("response", {"event": event, "status": self.status()})
 
     def update(self):
         if self.backend.get_event_rate() != None:
             self.add_to_graph(self.backend.get_event_rate(), datetime.now())
-        self.socketio.emit('update', {"status": self.status()})
+        self.socketio.emit("update", {"status": self.status()})
 
     def add_to_graph(self, value, timestamp=datetime.now()):
-        self.graph["labels"].append(timestamp.strftime('%d %b %Y %H:%M:%S'))
+        self.graph["labels"].append(timestamp.strftime("%d %b %Y %H:%M:%S"))
         self.graph["datasets"][0]["data"].append(value)
         self.graph["datasets"][0]["data"].pop(0)
         self.graph["labels"].pop(0)
@@ -241,6 +266,11 @@ class WebClient(Client):
 
     def start_web_server(self):
         webbrowser.open_new(
-            "http://%s:%d" % (self.config['web']["host"], self.config['web']["port"]))
-        self.socketio.run(self.flask_app, debug=bool(self.config["debug_mode"]),
-                          host=self.config['web']["host"], port=self.config['web']["port"])
+            "http://%s:%d" % (self.config["web"]["host"], self.config["web"]["port"])
+        )
+        self.socketio.run(
+            self.flask_app,
+            debug=bool(self.config["debug_mode"]),
+            host=self.config["web"]["host"],
+            port=self.config["web"]["port"],
+        )

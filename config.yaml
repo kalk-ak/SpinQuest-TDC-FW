@@ -5,7 +5,7 @@ graph:
 track_spills: true
 wait_for_spill: true
 display_character_width: 32
-time_display_format: '%d %b %Y %H:%M:%S'
+time_display_format: "%d %b %Y %H:%M:%S"
 debug_mode: false
 log_depth: 100
 web:
@@ -43,16 +43,11 @@ web:
 autopilot:
   enable: true
   run_types:
-  - test
-  - physics
-  - cosmics
+    - test
+    - physics
+    - cosmics
   default_user: user
   default_run_type: physics
-  default_run_notes: ''
+  default_run_notes: ""
   default_autorestart: true
   default_run_length: 120
-
-  
-
-
-

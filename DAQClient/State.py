@@ -1,4 +1,7 @@
-from enum import Enum 
+from enum import Enum
+
+
+# TODO: Add docs here
 class State(Enum):
     Disconnected = 0
     Connected = 1
@@ -8,3 +11,4 @@ class State(Enum):
     Stopped = 5
     Crashed = 6
     Unknown = 7
+
