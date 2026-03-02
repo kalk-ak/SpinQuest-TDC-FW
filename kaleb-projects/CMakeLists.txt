@@ -25,7 +25,7 @@ add_executable(daq_server)
 
 # HACK: This is risky as I am stating every file in src/ is to be included.
 # this can be Fixed later
-file(GLOB_RECURSE all_src_files CONFIGURE_DEPENDS "src/*" "src/*.cpp" "src/*.cxx" "src/*.h")
+file(GLOB_RECURSE all_src_files CONFIGURE_DEPENDS "src/*" "src/*.cpp" "src/*.cxx" "src/*.h src.*hpp")
 target_sources(daq_server PRIVATE ${all_src_files})
 
 

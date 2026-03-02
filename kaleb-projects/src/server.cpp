@@ -1,9 +1,9 @@
-#include "include/UniqueFD.h"
+#include "UniqueFD.h"
+#include "defined_utilites.h"
 #include <csignal>
 #include <cstdint>
 #include <fstream>
 #include <iostream>
-#include <iterator>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -26,10 +26,14 @@ void sigint_handler(int sig)
     keep_running = 0;
 }
 
-int main()
+int main(int argc, char *argv[])
 {
-    // TODO: in production it is better to use more robust signals and signal handlers
+    // TODO: in production (for the actual event handler) it is better to use more robust signals
+    // and signal handlers
     signal(SIGINT, sigint_handler);
+
+    // Parse command line options
+    server_parse_options options = parse_args(argc, argv, "Server Application");
 
     // Create Socket using RAII
     UniqueFD server_fd(socket(AF_INET, SOCK_STREAM, 0));

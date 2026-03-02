@@ -1,6 +1,7 @@
 #ifndef DEFINED_UTILITES_H
 #define DEFINED_UTILITES_H
 
+#include "UniqueFD.h"
 #include <string>
 #include <sys/socket.h>
 
@@ -15,18 +16,12 @@ struct server_parse_options
 
     // Have tcp connection as the default
     int network_type;
-};
 
-/**
- * @brief Parses command line arguments for the server application.
- *
- * This function uses CLI11 to handle flags like --port and --verbose.
- * If the parsing fails or --help is requested, the program will exit.
- *
- * @param argc The number of command line arguments.
- * @param argv The array of command line argument strings.
- * @return server_parse_options A struct containing the parsed options.
- */
-server_parse_options parse_args(int argc, char *argv[], std::string name);
+    // TODO: Add Number of boards to be used for concuruncy
+
+    // TODO: Add options for write back to buffer or file
+
+    // TODO:
+};
 
 #endif
