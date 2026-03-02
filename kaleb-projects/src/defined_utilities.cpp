@@ -4,6 +4,8 @@
 #include <cassert>
 #include <iostream>
 #include <netinet/in.h>
+#include <spdlog/common.h>
+#include <spdlog/spdlog.h>
 #include <sys/un.h>
 
 server_parse_options parse_args(int argc, char *argv[], std::string name)
@@ -29,7 +31,7 @@ server_parse_options parse_args(int argc, char *argv[], std::string name)
     }
     catch (const CLI::ParseError &e)
     {
-        std::cerr << "Invalid command line arguments: " << e.what() << "\n";
+        spdlog::error("Invalid Command Line Arguments:", e.what());
         exit(app.exit(e));
     }
 
@@ -45,7 +47,7 @@ server_parse_options parse_args(int argc, char *argv[], std::string name)
     }
     else
     {
-        std::cerr << "Invalid network type specified. Use 'tcp' or 'udp'.\n";
+        spdlog::error("Invalid network type specified. Use tcp or udp");
         exit(EXIT_FAILURE);
     }
     // NOTE: you can add functionality for adding more network types or BLUETOOTH in the future here
@@ -57,10 +59,8 @@ server_parse_options parse_args(int argc, char *argv[], std::string name)
     return options;
 }
 
-UniqueFD create_connection(const std::string &ip, const int port, const std::string &proto = "tcp",
-
-                           int internet_type = AF_INET,
-                           std::filesystem::path path = std::filesystem::current_path())
+UniqueFD create_connection(const std::string &ip, const int port, const std::string &proto,
+                           int internet_type, std::filesystem::path path)
 
 {
     // assert statements before starting
@@ -100,17 +100,17 @@ UniqueFD create_connection(const std::string &ip, const int port, const std::str
     {
     case AF_INET:
         // Handle IPv4
-        memset(&ip_addr4, 0, sizeof(ip_addr4));
+        memset(&ip_addr4, 0, sizeof(ip_addr4)); // Initiallize the structure to zero before using it
         ip_addr4.sin_family = AF_INET;
         ip_addr4.sin_port = htons(port);
 
         // log report
-        std::cout << "Using ipv4 socket." << std::endl;
+        spdlog::debug("Using ipv4 socket");
 
         // convert IP address to binary form
         if (inet_pton(internet_type, ip.c_str(), &ip_addr4.sin_addr) <= 0)
         {
-            perror("Invalid address for ipv4 \n");
+            spdlog::error("Invalid address for ipv4 \n");
             std::exit(1);
         }
 
@@ -124,13 +124,15 @@ UniqueFD create_connection(const std::string &ip, const int port, const std::str
         // Handle IPv6
         memset(&ip_addr6, 0, sizeof(ip_addr6));
         ip_addr6.sin6_family = AF_INET6;
-        ip_addr6.sin6_port = htons(port);
-        std::cout << "Using ipv6 socket." << std::endl;
+        ip_addr6.sin6_port =
+            htons(port); // NOTE: Flip the port number to network byte order using htons
+
+        spdlog::error("Using ipv6 socket.");
 
         // convert IP6 address to binary form
         if (inet_pton(internet_type, ip.c_str(), &ip_addr4.sin_addr) <= 0)
         {
-            perror("Invalid address for ipv6 \n");
+            spdlog::error("Invalid address for ipv6 \n");
             std::exit(1);
         }
 
@@ -145,7 +147,7 @@ UniqueFD create_connection(const std::string &ip, const int port, const std::str
         memset(&unix_addr, 0, sizeof(unix_addr));
         unix_addr.sun_family = AF_UNIX;
         strncpy(unix_addr.sun_path, path.string().c_str(), sizeof(unix_addr.sun_path) - 1);
-        std::cout << "Using UNIX socket." << std::endl;
+        spdlog::error("Using UNIX socket.");
 
         // Update final pointer for connection
         final_addr_size = sizeof(unix_addr);
