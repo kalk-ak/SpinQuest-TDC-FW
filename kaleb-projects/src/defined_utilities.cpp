@@ -85,6 +85,7 @@ UniqueFD create_connection(const std::string &ip, const int port, const std::str
     UniqueFD socket_wrapper(raw_fd);
 
     // Prepare socket address and size for initiating a connection later
+    // using a generic pointer and size variable to handle different socket types
     struct sockaddr *final_addr = nullptr;
     int final_addr_size = 0;
 
@@ -162,7 +163,7 @@ UniqueFD create_connection(const std::string &ip, const int port, const std::str
 
     // Connect (For UDP this just sets the default destination)
     // TODO: For UDP Make sure that the server is running before sening
-    if (connect(socket_wrapper.get(), final_addr, final_addr_size < 0))
+    if (connect(socket_wrapper.get(), final_addr, final_addr_size) < 0)
     {
         perror("Connection Failed");
         exit(1);
