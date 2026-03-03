@@ -2,65 +2,87 @@
 #include <arpa/inet.h> // For sockets
 #include <cassert>
 #include <netinet/in.h>
+#include <random>
 #include <spdlog/spdlog.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h> // For close()
 
+#include "defined_utilites.h"
 #include "fake_fpga_client.h"
 
 // Constructor
-FakeFPG::FakeFPG(const std::string &ip, int port, const std::string &proto, int internet_type,
-                 double spill_duration_sec, long long buffer_size)
+FakeFPG::FakeFPG(const int id, const std::string &ip, int port, const std::string &proto,
+                 int internet_type, double spill_duration_sec, double frequency_Mhz,
+                 long long buffer_size)
 
     // Initializer list to initialize the const expressions
-    : ip_(ip), port_(port), proto_(proto), internet_type_(internet_type),
-      spill_duration_sec_(spill_duration_sec), buffer_size_(buffer_size)
+    : id_(id), ip_(ip), port_(port), proto_(proto), internet_type_(internet_type),
+      spill_duration_sec_(spill_duration_sec), frequency_Mhz_(frequency_Mhz),
+      buffer_size_(buffer_size)
 {
+    spdlog::debug("Testing FPGA constructor with parameters:");
+    // Fail-Fast: Reject physically impossible states immediately
+    if (frequency_Mhz < 0.0)
+    {
+        throw std::invalid_argument("Error: FPGA frequency cannot be negative.");
+    }
+
+    if (id < 0)
+    {
+        throw std::invalid_argument("Error: FPGA ID cannot be negative.");
+    }
+
+    if (port < 0 || port > 65535)
+    {
+        throw std::invalid_argument("Error: Port number must be between 0 and 65535.");
+    }
+
+    if (internet_type != AF_INET && internet_type != AF_INET6 && internet_type != AF_UNIX)
+    {
+        throw std::invalid_argument(
+            "Error: Invalid internet type. Must be AF_INET, AF_INET6, or AF_UNIX.");
+    }
+
+    if (spill_duration_sec <= 0.0)
+    {
+        throw std::invalid_argument("Error: Spill duration must be positive.");
+    }
+
+    if (frequency_Mhz <= 0.0)
+    {
+        throw std::invalid_argument("Error: Frequency must be positive.");
+    }
+
+    if (buffer_size < 0)
+    {
+        throw std::invalid_argument("Error: Buffer size cannot be negative.");
+    }
     // Set up the connection with the Data Acquisition Server
-    _setup_connection();
-}
-
-// Helper function to set up the connection
-void FakeFPG::_setup_connection()
-{
-    // Create Socket
-    int sockfd = socket(internet_type_, proto_ == "tcp" ? SOCK_STREAM : SOCK_DGRAM, 0);
-    if (sockfd < 0)
-    {
-        perror("Socket creation failed");
-        exit(EXIT_FAILURE);
-    }
-    sockfd_.reset(sockfd);
-
-    // Connect to Server
-    struct sockaddr_in server_addr;
-    server_addr.sin_family = internet_type_;
-    server_addr.sin_port = htons(port_);
-    inet_pton(internet_type_, ip_.c_str(), &server_addr.sin_addr);
-
-    if (connect(sockfd_.get(), (struct sockaddr *) &server_addr, sizeof(server_addr)) < 0)
-    {
-        perror("Connection failed");
-        exit(EXIT_FAILURE);
-    }
-
-    spdlog::info("Connected to {}:{}", ip_, port_);
+    sockfd_ = create_connection(ip_, port_, proto_, internet_type_, path_);
+    spdlog::debug("FPGA {}: Connected to {}:{}", id_, ip_, port_);
 }
 
 // --- CORE: The Spill Simulation ---
-FakeFPG::void run_spill(int sockfd, double target_mbps)
+void FakeFPG::run_spill()
 {
-    spdlog::info(">>> STARTING SPILL (4.0 seconds) <<<");
+    spdlog::debug(">>> STARTING SPILL ({} seconds) <<<", spill_duration_sec_);
 
     // Setup Random Number Generator (64-bit)
-    std::mt19937_64 rng(std::random_device{}());
+    std::mt19937 rng(std::random_device{}());
 
+    // Calculate the delay between sends to achieve the target bandwidth
+    double target_mbps = frequency_Mhz_ * 1000.0;           // Convert MHz to Mbps
+    double bytes_per_sec = target_mbps * 1024 * 1024 / 8.0; // Convert Mbps to Bytes per second
+
+    // Log the time before starting the spill
+    auto start_time = std::chrono::steady_clock::now();
+
+    //
     // 1. Send Preamble (Start)
-    send(sockfd, &PREAMBLE_START, sizeof(uint64_t), 0);
+    send(sockfd_, &PREAMBLE_START, sizeof(uint64_t), 0);
 
     // 2. Stream Data
-    auto start_time = std::chrono::steady_clock::now();
     uint64_t total_bytes_sent = 0;
     std::vector<uint64_t> buffer(BUFFER_SIZE);
 
