@@ -1,9 +1,9 @@
-#include <sys/socket.h>
 #ifndef FAKE_FPGA_CLIENT_H
 
 #include "UniqueFD.h"
 #include <arpa/inet.h> // For sockets
 #include <string>
+#include <sys/socket.h>
 
 // --- CONFIGURATION ---
 // TODO: Make configurable via CLI
@@ -13,47 +13,55 @@ class FakeFPG
     // TODO: Add megahz bandwidth control
     // and speed (sleep time between sends)
   public:
+    // Deconstructor
     FakeFPG(const std::string &ip, int port, const std::string &proto = "tcp",
-            int internet_type = AF_INET);
-    FakeFPG(FakeFPG &&) = default;
-    FakeFPG(const FakeFPG &) = default;
-    FakeFPG &operator=(FakeFPG &&) = default;
-    FakeFPG &operator=(const FakeFPG &) = default;
+            int internet_type = AF_INET, double split_duration_sec = 4.0,
+            long long buffer_size = 1024);
+
+    // delete because it has a filedescriptor and we don't want to accidentally copy it
+    // also no need to have assignment operators as the sole purpose of this class
+    // is to run a spill and then be destroyed. If you want to run multiple spills, just create
+    // multiple instances of this class.
+    FakeFPG(FakeFPG &&) = delete;
+    FakeFPG(const FakeFPG &) = delete;
+
+    // TODO: Add move and copy assignment operators
+    FakeFPG &operator=(FakeFPG &&) = delete;
+    FakeFPG &operator=(const FakeFPG &) = delete;
+
+    // Deconstructor
     ~FakeFPG();
 
+    // Main interface
+    void run_spill();
+
   private:
+    // NOTE: Setting everything as const because all that the FAKE FPGA client
+    // needs to do is send data to a specific destination. It doesn't need to modify these
+    // parameters after construction.
     const std::string &ip_;
-    int prot_;
-    std::string &proto_;
-    int internet_type_;
-    uint64_t PREAMBLE_START = 0xAAAAAAAABBBBBBBB;
-    uint64_t PREAMBLE_END = 0xDEADBEEFDEADBEEF;
-    double SPILL_DURATION_SEC = 4.0;
+    const int port_;
+    const std::string &proto_;
+    const int internet_type_;
+
+    // HACK: Change preemble values here
+    // captures and logs
+    static constexpr uint64_t PREAMBLE_START = 0xAAAAAAAABBBBBBBB;
+    static constexpr uint64_t PREAMBLE_END = 0xDEADBEEFDEADBEEF;
+
+    // NOTE: Can be hyer-tuned based on the target bandwidth and system/network capabilities.
+    // this is why i haven't set it to static constexpr
+    const long long buffer_size_ = 1024; // Send 1024 64-bit words at a time (8KB packets)
+
+    // Not setting it static constexpr because we want to be able to configure it via CLI in the
+    // future. But for now, it's a constant.
+    const double SPILL_DURATION_SEC = 4.0;
+
+    // Using the UniqueFD pointer defined using RAII
+    UniqueFD sockfd_;
+
+    // Private Utilities for setting up the connection
+    void _setup_connection();
 };
 
-FakeFPG::FakeFPG()
-{
-}
-
-FakeFPG::~FakeFPG()
-{
-}
-/**
- * @brief Creates and connects a client socket to a remote server.
- *
- *
- * @note This function terminates the program (exit 1) on any failure.
- * fixed usage of `struct sockaddr_in`.
- *
- * @param ip The target IP address string
- * @param port The target port number.
- * @param proto The protocol to use: "tcp" or "udp" (default: "tcp").
- * @param internet_type The address family (AF_INET, AF_UNIX, AF_INET6) (default: AF_INET).
- * @param path The filesystem path for UNIX sockets (default: current working directory).
- *
- * @return UniqueFD An RAII wrapper owning the connected socket file descriptor.
- */
-UniqueFD create_connection(const std::string &ip, int port, const std::string &proto = "tcp",
-                           int internet_type = AF_INET);
-
-#endif // !#ifndef FAKE_FPGA_CLIENT_H
+#endif
