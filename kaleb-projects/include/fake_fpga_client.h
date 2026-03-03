@@ -36,11 +36,33 @@ class FakeFPG
     // Main interface
     void run_spill();
 
+    // Add getters and setters for debugging
+    int get_id() const
+    {
+        return id_;
+    }
+    std::string get_ip() const
+    {
+        return ip_;
+    }
+    int get_port() const
+    {
+        return port_;
+    }
+    std::string get_proto() const
+    {
+        return proto_;
+    }
+    int get_internet_type() const
+    {
+        return internet_type_;
+    }
+
   private:
     // NOTE: Setting everything as const because all that the FAKE FPGA client
     // needs to do is send data to a specific destination. It doesn't need to modify these
     // parameters after construction.
-    const int id;
+    const int id_;
     const std::string &ip_;
     const int port_;
     const std::string &proto_;
