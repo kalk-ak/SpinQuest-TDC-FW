@@ -148,7 +148,7 @@ UniqueFD create_connection(const std::string &ip, const int port, const std::str
         memset(&unix_addr, 0, sizeof(unix_addr));
         unix_addr.sun_family = AF_UNIX;
         strncpy(unix_addr.sun_path, path.string().c_str(), sizeof(unix_addr.sun_path) - 1);
-        spdlog::error("Using UNIX socket.");
+        spdlog::debug("Using UNIX socket.");
 
         // Update final pointer for connection
         final_addr_size = sizeof(unix_addr);
