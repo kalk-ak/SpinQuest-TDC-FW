@@ -67,6 +67,6 @@ server_parse_options parse_args(int argc, char *argv[], std::string name);
  */
 UniqueFD create_connection(const std::string &ip, const int port, const std::string &proto = "tcp",
                            int internet_type = AF_INET,
-                           std::filesystem::path path = std::filesystem::current_path());
+                           std::filesystem::path path = "/tmp/fpga_socket");
 
 #endif
