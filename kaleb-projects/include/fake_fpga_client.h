@@ -2,6 +2,7 @@
 
 #include "UniqueFD.h"
 #include <arpa/inet.h> // For sockets
+#include <filesystem>
 #include <string>
 #include <sys/socket.h>
 
@@ -13,9 +14,9 @@ class FakeFPG
     // TODO: Add megahz bandwidth control
     // and speed (sleep time between sends)
   public:
-    // Deconstructor
+    // constructor
     FakeFPG(const std::string &ip, int port, const std::string &proto = "tcp",
-            int internet_type = AF_INET, double split_duration_sec = 4.0,
+            int internet_type = AF_INET, double spill_duration_sec = 4.0,
             long long buffer_size = 1024);
 
     // delete because it has a filedescriptor and we don't want to accidentally copy it
@@ -39,10 +40,12 @@ class FakeFPG
     // NOTE: Setting everything as const because all that the FAKE FPGA client
     // needs to do is send data to a specific destination. It doesn't need to modify these
     // parameters after construction.
+    const int id;
     const std::string &ip_;
     const int port_;
     const std::string &proto_;
     const int internet_type_;
+    const std::filesystem::path path_ = "/tmp/fpga_socket"; // Default path for UNIX domain socket
 
     // HACK: Change preemble values here
     // captures and logs
@@ -55,7 +58,7 @@ class FakeFPG
 
     // Not setting it static constexpr because we want to be able to configure it via CLI in the
     // future. But for now, it's a constant.
-    const double SPILL_DURATION_SEC = 4.0;
+    const double spill_duration_sec_ = 4.0;
 
     // Using the UniqueFD pointer defined using RAII
     UniqueFD sockfd_;
