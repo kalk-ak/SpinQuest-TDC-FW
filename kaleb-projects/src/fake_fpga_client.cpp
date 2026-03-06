@@ -15,25 +15,22 @@
 #include "fake_fpga_client.h"
 
 // Constructor
-FakeFPG::FakeFPG(const int id, const std::string &ip, int port, const std::string &proto,
+FakeFPG::FakeFPG(const std::string id, const std::string ip, int port, const std::string proto,
                  int internet_type, double spill_duration_sec, double frequency_Mhz,
                  long long buffer_size)
 
-    // Initializer list to initialize the const expressions
     : id_(id), ip_(ip), port_(port), proto_(proto), internet_type_(internet_type),
       spill_duration_sec_(spill_duration_sec), frequency_Mhz_(frequency_Mhz),
       buffer_size_(buffer_size)
 {
     spdlog::debug("Testing FPGA constructor with parameters:");
-    // Fail-Fast: Reject physically impossible states immediately
+
+    spdlog::debug("Testing FPGA constructor with parameters:");
+
+    // Fast Fail: Reject physically impossible states immediately
     if (frequency_Mhz == 0.0)
     {
         throw std::invalid_argument("Error: FPGA frequency cannot be negative or zero.");
-    }
-
-    if (id < 0)
-    {
-        throw std::invalid_argument("Error: FPGA ID cannot be negative.");
     }
 
     if (port < 0 || port > 65535)
@@ -73,7 +70,7 @@ void FakeFPG::run_spill()
 {
     spdlog::debug(">>> STARTING SPILL FOR FPGA {} ({} seconds) <<<", id_, spill_duration_sec_);
 
-    // ----- PART 1: PRECOMPUTE PARAMETERS -----
+    // ----- PRECOMPUTE PARAMETERS -----
     // PERF: Precompute the parameters so that we free the main loop from doning unncessary
     // computations
 
@@ -100,9 +97,8 @@ void FakeFPG::run_spill()
         double chunks_per_sec =
             total_bytes_per_sec / bytes_per_chunk; // How many chunks we need to send per second to
                                                    // achieve the target bandwidth
-        long long delay_ns =
-            (long) (1e9 / chunks_per_sec); // Delay in nanoseconds between sending each
-                                           // chunk to achieve the target bandwidth
+        delay_ns = (long) (1e9 / chunks_per_sec);  // Delay in nanoseconds between sending each
+                                                   // chunk to achieve the target bandwidth
 
         // get the target amount of iterations needed to simulate the spill duration
         // NOTE: Being static_cast to long long because std::chrono::nanoseconds takes a long long

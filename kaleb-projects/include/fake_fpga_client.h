@@ -1,3 +1,5 @@
+#include <cstdint>
+#include <vector>
 #ifndef FAKE_FPGA_CLIENT_H
 
 #include "UniqueFD.h"
@@ -30,10 +32,9 @@ class FakeFPG
      * @param buffer_size The number of 64-bit words to send in a single packet. Defaults to 1024.
      * * @throws std::runtime_error If the socket creation or connection fails.
      */
-    FakeFPG(const int id, const std::string &ip, int port, const std::string &proto = "tcp",
+    FakeFPG(const std::string id, const std::string ip, int port, const std::string proto = "tcp",
             int internet_type = AF_INET, double spill_duration_sec = 4.0, double frequency_Mhz = 4,
             long long buffer_size = 1024);
-
     /**
      * @brief Executes a single particle accelerator spill cycle.
      * * This method simulates the high-throughput data generation of an FPGA during a beam spill.
@@ -59,7 +60,7 @@ class FakeFPG
     ~FakeFPG();
 
     // Add getters and setters for debugging
-    int get_id() const
+    std::string get_id() const
     {
         return id_;
     }
@@ -84,7 +85,7 @@ class FakeFPG
     // NOTE: Setting everything as const because all that the FAKE FPGA client
     // needs to do is send data to a specific destination. It doesn't need to modify these
     // parameters after construction.
-    const int id_;
+    const std::string id_;
     const double frequency_Mhz_; // Frequency in MHz, used to calculate the delay between sends to
                                  // achieve the target bandwidth
 
@@ -99,7 +100,7 @@ class FakeFPG
     static constexpr uint64_t PREAMBLE_START = 0xAAAAAAAABBBBBBBB;
     static constexpr uint64_t PREAMBLE_END = 0xDEADBEEFDEADBEEF;
 
-    // NOTE: Can be hyer-tuned based on the target bandwidth and system/network capabilities.
+    // PERF: Can be hyer-tuned based on the target bandwidth and system/network capabilities.
     // this is why i haven't set it to static constexpr
     const long long buffer_size_ = 1024; // Send 1024 64-bit words at a time (8KB packets)
 
@@ -109,6 +110,15 @@ class FakeFPG
 
     // Using the UniqueFD pointer defined using RAII
     UniqueFD sockfd_;
+
+    // NEW FUNCTIONALITY
+    // store all the sent data by this FPGA as a vector.
+    // Can be used for debugging and testing. In a real implementation, this would be written to
+    // disk or sent to a monitoring system.
+    std::vector<uint64_t> sent_data_;
+
+    // Utility to connect to a server
+    UniqueFD _connect_to_server();
 };
 
 #endif
