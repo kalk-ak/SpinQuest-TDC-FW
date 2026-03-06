@@ -1,9 +1,11 @@
 #include <CLI/CLI.hpp>
 #include <arpa/inet.h> // For sockets
 #include <cassert>
+#include <cstdint>
 #include <netinet/in.h>
 #include <random>
 #include <spdlog/spdlog.h>
+#include <stdexcept>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h> // For close()
@@ -23,9 +25,9 @@ FakeFPG::FakeFPG(const int id, const std::string &ip, int port, const std::strin
 {
     spdlog::debug("Testing FPGA constructor with parameters:");
     // Fail-Fast: Reject physically impossible states immediately
-    if (frequency_Mhz < 0.0)
+    if (frequency_Mhz <= 0.0)
     {
-        throw std::invalid_argument("Error: FPGA frequency cannot be negative.");
+        throw std::invalid_argument("Error: FPGA frequency cannot be negative or zero.");
     }
 
     if (id < 0)
@@ -41,7 +43,7 @@ FakeFPG::FakeFPG(const int id, const std::string &ip, int port, const std::strin
     if (internet_type != AF_INET && internet_type != AF_INET6 && internet_type != AF_UNIX)
     {
         throw std::invalid_argument(
-            "Error: Invalid internet type. Must be AF_INET, AF_INET6, or AF_UNIX.");
+            "Error: Invalid internet type. Only AF_INET, AF_INET6, or AF_UNIX supported.");
     }
 
     if (spill_duration_sec <= 0.0)
@@ -67,6 +69,29 @@ FakeFPG::FakeFPG(const int id, const std::string &ip, int port, const std::strin
 void FakeFPG::run_spill()
 {
     spdlog::debug(">>> STARTING SPILL ({} seconds) <<<", spill_duration_sec_);
+
+    // ----- PART 1: PRECOMPUTE PARAMETERS -----
+    // HACK: Precompute the parameters so that we free the main loop from doning unncessary
+    // computations
+
+    // Calculates the amount of data being sent each second
+    double size_of_data =
+        (double) sizeof(uint64_t); // NOTE: To change the data you must change the parameter here
+    double target_mbps = frequency_Mhz_ * size_of_data;
+
+    // Gets the total bytes in one chunk (buffer)
+    double bytes_per_chunk = buffer_size_ * size_of_data; // Total bytes in one chunk
+
+    // Convert Mbps to Bytes per second
+    double total_bytes_per_sec =
+        target_mbps * 1024 * 1024 / 8.0; // Dividing by 8 because Mbps is bits, we want bytes
+
+    double chunks_per_sec =
+        total_bytes_per_sec / bytes_per_chunk; // How many chunks we need to send per second to
+                                               // achieve the target bandwidth
+
+    double delay_ns = (long) (1e9 / chunks_per_sec); // Delay in nanoseconds between sending each
+                                                     // chunk to achieve the target bandwidth
 
     // Setup Random Number Generator (64-bit)
     std::mt19937 rng(std::random_device{}());
