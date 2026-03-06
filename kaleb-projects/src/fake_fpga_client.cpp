@@ -2,7 +2,6 @@
 #include <arpa/inet.h> // For sockets
 #include <cassert>
 #include <chrono>
-#include <cmath>
 #include <cstdint>
 #include <netinet/in.h>
 #include <random>
@@ -10,7 +9,6 @@
 #include <stdexcept>
 #include <sys/socket.h>
 #include <sys/un.h>
-#include <type_traits>
 #include <unistd.h> // For close()
 
 #include "defined_utilites.h"
@@ -28,7 +26,7 @@ FakeFPG::FakeFPG(const int id, const std::string &ip, int port, const std::strin
 {
     spdlog::debug("Testing FPGA constructor with parameters:");
     // Fail-Fast: Reject physically impossible states immediately
-    if (frequency_Mhz <= 0.0)
+    if (frequency_Mhz == 0.0)
     {
         throw std::invalid_argument("Error: FPGA frequency cannot be negative or zero.");
     }
@@ -73,35 +71,46 @@ FakeFPG::FakeFPG(const int id, const std::string &ip, int port, const std::strin
 // send as fast as possible).
 void FakeFPG::run_spill()
 {
-    spdlog::debug(">>> STARTING SPILL ({} seconds) <<<", spill_duration_sec_);
+    spdlog::debug(">>> STARTING SPILL FOR FPGA {} ({} seconds) <<<", id_, spill_duration_sec_);
 
     // ----- PART 1: PRECOMPUTE PARAMETERS -----
     // PERF: Precompute the parameters so that we free the main loop from doning unncessary
     // computations
 
-    // Calculates the amount of data being sent each second
-    double size_of_data =
-        (double) sizeof(uint64_t); // NOTE: To change the data you must change the parameter here
-    double target_mbps = frequency_Mhz_ * size_of_data;
+    // check if overclocking is set to unlimited
+    bool is_unlimited = (frequency_Mhz_ == 0.0);
+    long long delay_ns = 0;
+    long long target_iteration = 0;
 
-    // Gets the total bytes in one chunk (buffer)
-    double bytes_per_chunk = buffer_size_ * size_of_data; // Total bytes in one chunk
+    if (not is_unlimited)
+    {
+        // Calculates the amount of data being sent each second
+        double size_of_data = (double) sizeof(
+            uint64_t); // NOTE: If you change the data you must change the parameter here
 
-    // Convert Mbps to Bytes per second
-    double total_bytes_per_sec =
-        target_mbps * 1024 * 1024 / 8.0; // Dividing by 8 because Mbps is bits, we want bytes
+        double target_hz = frequency_Mhz_ * 1'000'000; // Convert MHz to Hz (cycles per second)
 
-    double chunks_per_sec =
-        total_bytes_per_sec / bytes_per_chunk; // How many chunks we need to send per second to
-                                               // achieve the target bandwidth
+        // Gets the total bytes in one chunk (buffer)
+        double bytes_per_chunk = buffer_size_ * size_of_data; // Total bytes in one chunk
 
-    long long delay_ns = (long) (1e9 / chunks_per_sec); // Delay in nanoseconds between sending each
-                                                        // chunk to achieve the target bandwidth
+        // get the total bytes sent in each second
+        double total_bytes_per_sec = target_hz * size_of_data;
 
-    // get the target amount of iterations needed to simulate the spill duration
-    long long target_iteration = static_cast<long long>(chunks_per_sec * spill_duration_sec_);
+        // get how many chunk per second to send
+        double chunks_per_sec =
+            total_bytes_per_sec / bytes_per_chunk; // How many chunks we need to send per second to
+                                                   // achieve the target bandwidth
+        long long delay_ns =
+            (long) (1e9 / chunks_per_sec); // Delay in nanoseconds between sending each
+                                           // chunk to achieve the target bandwidth
 
-    // Pre-fill the Buffer so that Zero RNG overhead in the tight loop
+        // get the target amount of iterations needed to simulate the spill duration
+        // NOTE: Being static_cast to long long because std::chrono::nanoseconds takes a long long
+        // as parameter and we want to avoid overflow
+        long long target_iteration = static_cast<long long>(chunks_per_sec * spill_duration_sec_);
+    }
+
+    // pre fill the Buffer so that Zero RNG overhead in the tight loop
     std::vector<uint64_t> buffer(buffer_size_);
     std::mt19937_64 rng(std::random_device{}());
     for (int i = 0; i < buffer_size_; ++i)
@@ -121,24 +130,46 @@ void FakeFPG::run_spill()
     // 2 --- STREAM DATA ---
     while (true)
     {
-        if (current_iteration > target_iteration)
-            break;
+        // --- LOOP BREAK CONDITIONS ---
+        if (is_unlimited)
+        {
+            // OVERCLOCK MODE: Check the clock every 1000 sends to save CPU cycles
+            if (current_iteration % 1000 == 0)
+            {
+                auto now = std::chrono::steady_clock::now();
+                if (std::chrono::duration<double>(now - start_time).count() >= spill_duration_sec_)
+                {
+                    break;
+                }
+            }
+        }
+        else
+        {
+            // LIMITED MODE: Just count iterations (Fastest)
+            if (current_iteration >= target_iteration)
+            {
+                break;
+            }
+        }
 
-        // TODO: Add here a stop for unlimited overclocking. You can check the clock and see if the
-        // spill duration is past
-        // Send the pre-filled buffer
+        // send the data
         ssize_t sent = send(sockfd_.get(), buffer.data(), buffer.size() * sizeof(uint64_t), 0);
         if (sent < 0)
         {
             spdlog::error("Send failed at iteration {}: {}", current_iteration, strerror(errno));
             failed_sends += 1;
         }
+        else
+        {
+            // track the successful send for debugging
+            total_bytes_sent += sent;
+        }
 
-        // track the total bytes sent and the current iteration
-        total_bytes_sent += sent;
+        // track the current iteration
         ++current_iteration;
 
         // Rate Limit of speed
+        // NOTE: delay is set to zero for unlimited overclock mode
         if (delay_ns > 0)
         {
             std::this_thread::sleep_for(std::chrono::nanoseconds(delay_ns));
@@ -150,7 +181,8 @@ void FakeFPG::run_spill()
     // Get the end time
     auto end_time = std::chrono::steady_clock::now();
 
-    spdlog::info(">>> SPILL COMPLETE <<<");
+    // LOGGING: Log the results of the spill
+    spdlog::info(">>> SPILL COMPLETE FOR FPGA {} <<<", id_);
     spdlog::debug("\tSent: {:.2f} MB across {} iterations", total_bytes_sent / 1024.0 / 1024.0,
                   current_iteration);
     spdlog::debug("\tSkipped {} sends due to errors.", failed_sends);
