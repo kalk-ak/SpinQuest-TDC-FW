@@ -1,6 +1,8 @@
 #include <CLI/CLI.hpp>
 #include <arpa/inet.h> // For sockets
 #include <cassert>
+#include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <netinet/in.h>
 #include <random>
@@ -8,6 +10,7 @@
 #include <stdexcept>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <type_traits>
 #include <unistd.h> // For close()
 
 #include "defined_utilites.h"
@@ -66,12 +69,14 @@ FakeFPG::FakeFPG(const int id, const std::string &ip, int port, const std::strin
 }
 
 // --- CORE: The Spill Simulation ---
+// TODO: Implement a feature for unlimited overclock (i.e. ignore the frequency parameter and just
+// send as fast as possible).
 void FakeFPG::run_spill()
 {
     spdlog::debug(">>> STARTING SPILL ({} seconds) <<<", spill_duration_sec_);
 
     // ----- PART 1: PRECOMPUTE PARAMETERS -----
-    // HACK: Precompute the parameters so that we free the main loop from doning unncessary
+    // PERF: Precompute the parameters so that we free the main loop from doning unncessary
     // computations
 
     // Calculates the amount of data being sent each second
@@ -90,76 +95,65 @@ void FakeFPG::run_spill()
         total_bytes_per_sec / bytes_per_chunk; // How many chunks we need to send per second to
                                                // achieve the target bandwidth
 
-    double delay_ns = (long) (1e9 / chunks_per_sec); // Delay in nanoseconds between sending each
-                                                     // chunk to achieve the target bandwidth
+    long long delay_ns = (long) (1e9 / chunks_per_sec); // Delay in nanoseconds between sending each
+                                                        // chunk to achieve the target bandwidth
 
-    // Setup Random Number Generator (64-bit)
-    std::mt19937 rng(std::random_device{}());
+    // get the target amount of iterations needed to simulate the spill duration
+    long long target_iteration = static_cast<long long>(chunks_per_sec * spill_duration_sec_);
 
-    // Calculate the delay between sends to achieve the target bandwidth
-    double target_mbps = frequency_Mhz_ * 1000.0;           // Convert MHz to Mbps
-    double bytes_per_sec = target_mbps * 1024 * 1024 / 8.0; // Convert Mbps to Bytes per second
-
-    // Log the time before starting the spill
-    auto start_time = std::chrono::steady_clock::now();
-
-    //
-    // 1. Send Preamble (Start)
-    send(sockfd_, &PREAMBLE_START, sizeof(uint64_t), 0);
-
-    // 2. Stream Data
-    uint64_t total_bytes_sent = 0;
-    std::vector<uint64_t> buffer(BUFFER_SIZE);
-
-    // Calculate delay to match bandwidth
-    // Bytes per second target
-    double bytes_per_sec =
-        target_mbps * 1024 * 1024 /
-        8.0; // /8 because Mbps usually means bits, MBps is Bytes. Let's assume MB/s for simplicity?
-    // Actually, usually BW is Megabits. Let's assume input is Megabytes per Second (MB/s) for
-    // easier math. If target is 100 MB/s, and we send 8KB chunks. 8KB = 8192 bytes. Chunks per sec
-    // = (Target * 10^6) / 8192. Delay between chunks = 1 / Chunks_per_sec.
-
-    long delay_ns = 0;
-    if (target_mbps > 0)
+    // Pre-fill the Buffer so that Zero RNG overhead in the tight loop
+    std::vector<uint64_t> buffer(buffer_size_);
+    std::mt19937_64 rng(std::random_device{}());
+    for (int i = 0; i < buffer_size_; ++i)
     {
-        double chunks_per_sec = (target_mbps * 1000000.0) / (BUFFER_SIZE * 8); // 8 bytes per word
-        delay_ns = (long) (1e9 / chunks_per_sec);
+        buffer[i] = rng();
     }
 
+    // Time the spill
+    auto start_time = std::chrono::steady_clock::now();
+    send(sockfd_.get(), &PREAMBLE_START, sizeof(uint64_t), 0);
+
+    // Track the total bytes sent and the current iteration
+    long long total_bytes_sent = 0;
+    long long current_iteration = 0;
+    long long failed_sends = 0;
+
+    // 2 --- STREAM DATA ---
     while (true)
     {
-        // Check time
-        auto now = std::chrono::steady_clock::now();
-        std::chrono::duration<double> elapsed = now - start_time;
-        if (elapsed.count() >= SPILL_DURATION_SEC)
+        if (current_iteration > target_iteration)
             break;
 
-        // Fill buffer with random 64-bit words
-        for (int i = 0; i < BUFFER_SIZE; ++i)
-        {
-            buffer[i] = rng();
-        }
-
-        // Send Buffer
-        ssize_t sent = send(sockfd, buffer.data(), buffer.size() * sizeof(uint64_t), 0);
+        // TODO: Add here a stop for unlimited overclocking. You can check the clock and see if the
+        // spill duration is past
+        // Send the pre-filled buffer
+        ssize_t sent = send(sockfd_.get(), buffer.data(), buffer.size() * sizeof(uint64_t), 0);
         if (sent < 0)
         {
-            perror("Send failed");
-            break;
+            spdlog::error("Send failed at iteration {}: {}", current_iteration, strerror(errno));
+            failed_sends += 1;
         }
-        total_bytes_sent += sent;
 
-        // Rate Limit
+        // track the total bytes sent and the current iteration
+        total_bytes_sent += sent;
+        ++current_iteration;
+
+        // Rate Limit of speed
         if (delay_ns > 0)
         {
             std::this_thread::sleep_for(std::chrono::nanoseconds(delay_ns));
         }
     }
+    // 3 ------ End Spill ------
+    send(sockfd_.get(), &PREAMBLE_END, sizeof(uint64_t), 0);
 
-    // 3. Send Preamble (End)
-    send(sockfd, &PREAMBLE_END, sizeof(uint64_t), 0);
+    // Get the end time
+    auto end_time = std::chrono::steady_clock::now();
 
     spdlog::info(">>> SPILL COMPLETE <<<");
-    spdlog::info("    Sent: {} MB", total_bytes_sent / 1024.0 / 1024.0);
+    spdlog::debug("\tSent: {:.2f} MB across {} iterations", total_bytes_sent / 1024.0 / 1024.0,
+                  current_iteration);
+    spdlog::debug("\tSkipped {} sends due to errors.", failed_sends);
+    std::chrono::duration<double> elapsed_seconds = end_time - start_time;
+    spdlog::info("\tElapsed Time: {:.2f} seconds", elapsed_seconds.count());
 }
