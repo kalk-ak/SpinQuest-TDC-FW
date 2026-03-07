@@ -11,6 +11,7 @@
 int main(int argc, char **argv)
 {
     CLI::App app{"Fake FPGA Client - Particle Spill Simulator"};
+    bool verbose = false; // Set logging level to debug if verbose flag is passed
 
     std::string ip = "666.6.6.7";
     int port = 6767;
@@ -29,8 +30,15 @@ int main(int argc, char **argv)
         ->check(CLI::NonNegativeNumber);
     app.add_option("-b,--boards", num_boards, "Number of concurrent boards to simulate");
     app.add_option("--names", names_file, "Path to text file containing board names");
+    app.add_flag("-v,--verbose", verbose, "Enable verbose debug logging");
 
     CLI11_PARSE(app, argc, argv);
+
+    // Set logging level to debug if the verbose flag was passed
+    if (verbose)
+    {
+        spdlog::set_level(spdlog::level::debug);
+    }
 
     try
     {
