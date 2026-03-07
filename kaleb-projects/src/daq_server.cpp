@@ -390,6 +390,7 @@ void DAQServer::datagram_worker(int worker_id)
 
     while (is_running_)
     {
+        // store the sendsers address so we can create a unique file for each sender
         struct sockaddr_in sender_addr;
         socklen_t sender_len = sizeof(sender_addr);
 
@@ -397,30 +398,48 @@ void DAQServer::datagram_worker(int worker_id)
         ssize_t bytes_read = recvfrom(safe_thread_socket.get(), buffer.data(), buffer.size(), 0,
                                       (struct sockaddr *) &sender_addr, &sender_len);
 
-        if (bytes_read <= 0)
+        // Check for errors
+        if (bytes_read == 0)
+        {
+            spdlog::error("Connection closed for UDP Worker {}. Exiting thread.", worker_id);
             break;
+        }
+        else if (bytes_read < 0)
+        {
+            spdlog::error("Network error encountered in UDP Worker {}: {}", worker_id,
+                          strerror(errno));
+            break;
+        }
 
         // Create a unique string ID for this specific board (e.g., "127.0.0.1:54321")
+        // key = IP + PORT
         std::string client_id = std::string(inet_ntoa(sender_addr.sin_addr)) + ":" +
                                 std::to_string(ntohs(sender_addr.sin_port));
 
         // Get or create the state for this client
+        // NOTE: This variable is very important.
         UDPClientState &state = clients[client_id];
 
+        // Calculate the number of 64-bit words read and get a pointer to the buffer as an array of
+        // 64-bit
         size_t words_read = bytes_read / sizeof(uint64_t);
         uint64_t *word_ptr = reinterpret_cast<uint64_t *>(buffer.data());
         size_t write_start_idx = 0;
 
         for (size_t i = 0; i < words_read; ++i)
         {
-            if (!state.recording && word_ptr[i] == PREAMBLE_START)
+            if (not state.recording && word_ptr[i] == PREAMBLE_START)
             {
                 state.recording = true;
                 write_start_idx = i + 1;
 
                 // Open file the first time we see a start preamble from this board
-                if (!state.file.is_open())
+                if (not state.file.is_open())
                 {
+                    // INFO:
+                    // Because of the kernel level load balancing, we are guaranteed that only one
+                    // thread will ever see packets from this specific board, so we can safely
+                    // create a file for it without
                     std::filesystem::path fp =
                         output_dir_ / ("udp_spill_" + std::to_string(clients.size()) + ".dat");
                     state.file.open(fp, std::ios::binary);
@@ -435,7 +454,7 @@ void DAQServer::datagram_worker(int worker_id)
                 state.recording = false;
 
                 spdlog::info("UDP Worker {} -> Stream {}: Saved {:.2f} MB.", worker_id, client_id,
-                             state.total_bytes / 1048576.0);
+                             state.total_bytes / (1024 * 1024));
                 state.file.close(); // Close the file when the spill ends
             }
         }
@@ -448,4 +467,24 @@ void DAQServer::datagram_worker(int worker_id)
             state.total_bytes += words_to_write * 8;
         }
     }
+
+    // INFO: How Thread Safety is Guaranteed Without Mutexes
+    // -------------------------------------------------------------------------
+    // Because UDP is connectionless, you might wonder how we prevent two different
+    // threads from grabbing packets from the same FPGA board and corrupting the
+    // same output file simultaneously.
+    //
+    // INFO: That is because of the SO_REUSEPORT flag. When multiple threads bind to the exact
+    // same port using this flag, the Linux kernel acts as a deterministic load balancer.
+    //
+    // INFO: 1. When a packet arrives, the kernel calculates a mathematical hash based on
+    //    a 4-tuple: (Source IP, Source Port, Destination IP, Destination Port).
+    // 2. Because an FPGA board's Source IP and Source Port never change during a
+    //    continuous spill, the hash function always produces the exact same result.
+    // 3. Therefore, 100% of the packets sent by a specific board (e.g., Board 5)
+    //    will ALWAYS be routed to the exact same worker thread.
+    //
+    // INFO: This hardware level routing guarantees that our thread local `unordered_map`
+    // and file streams are safe. No two threads will ever see data from
+    // the same board, giving us lock-free, multi-core disk I/O performance.
 }
