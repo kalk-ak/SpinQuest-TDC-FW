@@ -342,36 +342,66 @@ void DAQServer::run_datagram_server()
 
 void DAQServer::datagram_worker(int worker_id)
 {
-    // Create a brand new socket for this specific thread
-    int thread_fd = socket(internet_type_, network_type_, 0);
-    if (thread_fd < 0)
-        return;
+    int thread_fd = -1;
+    UniqueFD safe_thread_socket;
 
-    // Add the SO_REUSEPORT flag so it can share the port with the other threads
-    // Add the SO_REUSEADDR so that there is no cool down in using the port
-    int opt = 1;
-    setsockopt(thread_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-    setsockopt(thread_fd, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt));
-
-    // Bind to the exact same address
-    struct sockaddr_in addr4;
-    memset(&addr4, 0, sizeof(addr4));
-    addr4.sin_family = AF_INET;
-    addr4.sin_port = htons(port_);
-    inet_pton(AF_INET, ip_.c_str(), &addr4.sin_addr);
-
-    // Error checker to see if we've binded correctly
-    if (bind(thread_fd, (struct sockaddr *) &addr4, sizeof(addr4)) < 0)
+    if (internet_type_ == AF_UNIX)
     {
-        close(thread_fd);
-        return;
+        // UNIX sockets do NOT support SO_REUSEPORT.
+        // Instead, all worker threads safely share the main server_socket_ descriptor.
+        thread_fd = server_socket_.get();
+        spdlog::info("UNIX Datagram Worker {} sharing main socket.", worker_id);
     }
+    else
+    {
+        // Create a brand new socket for this specific thread
+        thread_fd = socket(internet_type_, network_type_, 0);
+        if (thread_fd < 0)
+            return;
 
-    // Track it in a list so stop() can shut it down safely
-    udp_worker_fds_.push_back(thread_fd);
-    UniqueFD safe_thread_socket(thread_fd);
+        // Add the SO_REUSEPORT flag so it can share the port with the other threads
+        // Add the SO_REUSEADDR so that there is no cool down in using the port
+        int opt = 1;
+        setsockopt(thread_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+        setsockopt(thread_fd, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt));
 
-    spdlog::info("UDP Listener {} ready and bound.", worker_id);
+        // Bind to the exact same address
+        struct sockaddr *addr_ptr = nullptr;
+        socklen_t addr_len = 0;
+        struct sockaddr_in addr4;
+        struct sockaddr_in6 addr6;
+
+        if (internet_type_ == AF_INET)
+        {
+            memset(&addr4, 0, sizeof(addr4));
+            addr4.sin_family = AF_INET;
+            addr4.sin_port = htons(port_);
+            inet_pton(AF_INET, ip_.c_str(), &addr4.sin_addr);
+            addr_ptr = (struct sockaddr *) &addr4;
+            addr_len = sizeof(addr4);
+        }
+        else if (internet_type_ == AF_INET6)
+        {
+            memset(&addr6, 0, sizeof(addr6));
+            addr6.sin6_family = AF_INET6;
+            addr6.sin6_port = htons(port_);
+            inet_pton(AF_INET6, ip_.c_str(), &addr6.sin6_addr);
+            addr_ptr = (struct sockaddr *) &addr6;
+            addr_len = sizeof(addr6);
+        }
+
+        // Error checker to see if we've binded correctly
+        if (bind(thread_fd, addr_ptr, addr_len) < 0)
+        {
+            close(thread_fd);
+            return;
+        }
+
+        // Track it in a list so stop() can shut it down safely
+        udp_worker_fds_.push_back(thread_fd);
+        safe_thread_socket.reset(thread_fd); // Claim ownership
+        spdlog::info("IP Datagram Worker {} ready and bound.", worker_id);
+    }
 
     // Because UDP has no threads per connection, we multiplex by mapping IP:Port strings to
     // specific files
@@ -391,30 +421,58 @@ void DAQServer::datagram_worker(int worker_id)
     while (is_running_)
     {
         // store the sendsers address so we can create a unique file for each sender
-        struct sockaddr_in sender_addr;
+        // FIX: Use sockaddr_storage to safely catch IPv4, IPv6, OR UNIX addresses without
+        // overflowing
+        struct sockaddr_storage sender_addr;
         socklen_t sender_len = sizeof(sender_addr);
 
         // recvfrom() grabs the packet AND tells us who sent it
-        ssize_t bytes_read = recvfrom(safe_thread_socket.get(), buffer.data(), buffer.size(), 0,
+        ssize_t bytes_read = recvfrom(thread_fd, buffer.data(), buffer.size(), 0,
                                       (struct sockaddr *) &sender_addr, &sender_len);
 
         // Check for errors
         if (bytes_read == 0)
         {
-            spdlog::error("Connection closed for UDP Worker {}. Exiting thread.", worker_id);
+            spdlog::error("Connection closed for Datagram Worker {}. Exiting thread.", worker_id);
             break;
         }
         else if (bytes_read < 0)
         {
-            spdlog::error("Network error encountered in UDP Worker {}: {}", worker_id,
+            spdlog::error("Network error encountered in Datagram Worker {}: {}", worker_id,
                           strerror(errno));
             break;
         }
 
         // Create a unique string ID for this specific board (e.g., "127.0.0.1:54321")
         // key = IP + PORT
-        std::string client_id = std::string(inet_ntoa(sender_addr.sin_addr)) + ":" +
-                                std::to_string(ntohs(sender_addr.sin_port));
+        std::string client_id;
+        if (sender_addr.ss_family == AF_INET)
+        {
+            struct sockaddr_in *s = (struct sockaddr_in *) &sender_addr;
+            client_id =
+                std::string(inet_ntoa(s->sin_addr)) + ":" + std::to_string(ntohs(s->sin_port));
+        }
+        else if (sender_addr.ss_family == AF_INET6)
+        {
+            struct sockaddr_in6 *s = (struct sockaddr_in6 *) &sender_addr;
+            char ip_str[INET6_ADDRSTRLEN];
+            inet_ntop(AF_INET6, &s->sin6_addr, ip_str, sizeof(ip_str));
+            client_id = std::string(ip_str) + ":" + std::to_string(ntohs(s->sin6_port));
+        }
+        else if (sender_addr.ss_family == AF_UNIX)
+        {
+            // For UNIX domain sockets, we can use the sun_path as the identifier. If sun_path is
+            // empty, we can use a fall back unamed name.
+            struct sockaddr_un *s = (struct sockaddr_un *) &sender_addr;
+            if (s->sun_path[0] == '\0')
+            {
+                client_id = "unix_unnamed_client";
+            }
+            else
+            {
+                client_id = std::string(s->sun_path);
+            }
+        }
 
         // Get or create the state for this client
         // NOTE: This variable is very important.
@@ -453,8 +511,8 @@ void DAQServer::datagram_worker(int worker_id)
                 state.total_bytes += words_to_write * 8;
                 state.recording = false;
 
-                spdlog::info("UDP Worker {} -> Stream {}: Saved {:.2f} MB.", worker_id, client_id,
-                             state.total_bytes / (1024 * 1024));
+                spdlog::info("Datagram Worker {} -> Stream {}: Saved {:.2f} MB.", worker_id,
+                             client_id, state.total_bytes / (1024.0 * 1024.0));
                 state.file.close(); // Close the file when the spill ends
             }
         }
