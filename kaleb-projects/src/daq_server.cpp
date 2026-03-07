@@ -1,5 +1,6 @@
 #include "daq_server.h"
 #include <arpa/inet.h>
+#include <cstdlib>
 #include <cstring>
 #include <spdlog/spdlog.h>
 #include <stdexcept>
@@ -271,20 +272,25 @@ void DAQServer::handle_stream_client(UniqueFD client_socket, int client_id)
             break;
         }
 
+        // Get the total number of words read and check if any of them have the start or end
+        // preamble
         size_t words_read = bytes_read / sizeof(uint64_t);
         uint64_t *word_ptr = reinterpret_cast<uint64_t *>(buffer.data());
         size_t write_start_idx = 0;
 
+        // NOTE: Have a for loop to check for the start and end preamble
         for (size_t i = 0; i < words_read; ++i)
         {
-            if (!recording && word_ptr[i] == PREAMBLE_START)
+            if (not recording && word_ptr[i] == PREAMBLE_START)
             {
                 recording = true;
-                write_start_idx = i + 1;
+                write_start_idx = i + 1; // start recording the data at the next 64bit word
             }
             else if (recording && word_ptr[i] == PREAMBLE_END)
             {
                 size_t words_to_write = i - write_start_idx;
+
+                // start writing from the start index to the end which equals num_words_to_write * 8
                 out_file.write(reinterpret_cast<const char *>(&word_ptr[write_start_idx]),
                                words_to_write * 8);
                 total_bytes += words_to_write * 8;
@@ -295,16 +301,20 @@ void DAQServer::handle_stream_client(UniqueFD client_socket, int client_id)
 
         if (recording)
         {
+            // write the received buffer to memory
             size_t words_to_write = words_read - write_start_idx;
             out_file.write(reinterpret_cast<const char *>(&word_ptr[write_start_idx]),
                            words_to_write * 8);
             total_bytes += words_to_write * 8;
         }
 
-        if (!recording && total_bytes > 0)
+        if (not recording && total_bytes > 0)
+        {
+            spdlog::error("PREAMBLE Not sent in the first set of buffer for client {}", client_id);
             break;
+        }
     }
-    spdlog::info("TCP Worker {}: Saved {:.2f} MB.", client_id, total_bytes / 1048576.0);
+    spdlog::info("TCP Worker {}: Saved {:.2f} MB.", client_id, total_bytes / (1024 * 1024));
 }
 
 // ============================================================================
@@ -312,6 +322,9 @@ void DAQServer::handle_stream_client(UniqueFD client_socket, int client_id)
 // ============================================================================
 void DAQServer::run_datagram_server()
 {
+    // WARN:: This is an unconventional approach. What I am doing is that I am creating multiple
+    // listeners on the same port to utilize concurrency in UDP. There must be a way to re order the
+    // data once we have collected them
     spdlog::info("Spawning {} concurrent UDP listeners on port {}...", num_udp_workers_, port_);
 
     // We don't use accept(). We just spin up multiple threads that all bind to the same port.
@@ -329,30 +342,32 @@ void DAQServer::run_datagram_server()
 
 void DAQServer::datagram_worker(int worker_id)
 {
-    // 1. Create a brand new socket for this specific thread
+    // Create a brand new socket for this specific thread
     int thread_fd = socket(internet_type_, network_type_, 0);
     if (thread_fd < 0)
         return;
 
-    // 2. Add the SO_REUSEPORT flag so it can share the port with the other threads
+    // Add the SO_REUSEPORT flag so it can share the port with the other threads
+    // Add the SO_REUSEADDR so that there is no cool down in using the port
     int opt = 1;
     setsockopt(thread_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
     setsockopt(thread_fd, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt));
 
-    // 3. Bind to the exact same address
+    // Bind to the exact same address
     struct sockaddr_in addr4;
     memset(&addr4, 0, sizeof(addr4));
     addr4.sin_family = AF_INET;
     addr4.sin_port = htons(port_);
     inet_pton(AF_INET, ip_.c_str(), &addr4.sin_addr);
 
+    // Error checker to see if we've binded correctly
     if (bind(thread_fd, (struct sockaddr *) &addr4, sizeof(addr4)) < 0)
     {
         close(thread_fd);
         return;
     }
 
-    // Track it so stop() can shut it down safely
+    // Track it in a list so stop() can shut it down safely
     udp_worker_fds_.push_back(thread_fd);
     UniqueFD safe_thread_socket(thread_fd);
 
@@ -366,6 +381,9 @@ void DAQServer::datagram_worker(int worker_id)
         long long total_bytes = 0;
         std::ofstream file;
     };
+
+    // OPTIMIZE: Hashmaps can be slow. Perhaps embed the id inside the word and just dump into a big
+    // binary
     std::unordered_map<std::string, UDPClientState> clients;
 
     std::vector<uint8_t> buffer(recv_buffer_size_);

@@ -2,8 +2,7 @@
 
 #include "UniqueFD.h"
 
-#endif // !DEBUG
-
+// check header for details
 UniqueFD::UniqueFD(int f) : fd(f)
 {
 }
@@ -46,3 +45,5 @@ int UniqueFD::release()
     fd = -1;
     return temp;
 }
+
+#endif // !DEBUG
