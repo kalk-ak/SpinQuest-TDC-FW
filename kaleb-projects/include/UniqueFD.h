@@ -13,6 +13,10 @@ class UniqueFD
 
   public:
     // Constructor. Default is -1 (invalid FD)
+<<<<<<< HEAD
+=======
+    // NOTE: explicit prevents implicit conversions (e.g. UniqueFD myfd = 5; would be an error)
+>>>>>>> feature
     explicit UniqueFD(int f = -1);
 
     // Prevent copying (don't want two objects closing the same FD)

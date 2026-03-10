@@ -1,9 +1,15 @@
+<<<<<<< HEAD
 #ifndef DEBUG
 
 #include "UniqueFD.h"
 
 #endif // !DEBUG
 
+=======
+#include "UniqueFD.h"
+
+// check header for details
+>>>>>>> feature
 UniqueFD::UniqueFD(int f) : fd(f)
 {
 }
