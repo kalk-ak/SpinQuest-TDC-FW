@@ -14,40 +14,6 @@ FetchContent_Declare(
   GIT_REPOSITORY https://github.com/CLIUtils/CLI11
   GIT_TAG        v2.6.0
 )
-<<<<<<< HEAD
-FetchContent_MakeAvailable(cli11)
-
-
-# ---------------- END OF DOWNLOAD --------------------------------------
-
-
-# Define the Executable
-add_executable(daq_server)
-
-# HACK: This is risky as I am stating every file in src/ is to be included.
-# this can be Fixed later
-file(GLOB_RECURSE all_src_files CONFIGURE_DEPENDS "src/*" "src/*.cpp" "src/*.cxx" "src/*.h")
-target_sources(daq_server PRIVATE ${all_src_files})
-
-
-# TODO: separate source files as the project grows
-#
-# target_sources(daq_server PRIVATE
-#   src/main.cpp
-#   src/DAQServer.cpp
-# )
-
-# Use C++ 17
-target_compile_features(daq_server PRIVATE cxx_std_17)
-
-# Setup Includes
-# Go ahead and include the include/ folder
-target_include_directories(daq_server PRIVATE include)
-
-# Link Libraries
-# "I need CLI11 to build."
-target_link_libraries(daq_server PRIVATE CLI11::CLI11)
-=======
 
 # Download spdlog for better logging
 FetchContent_Declare(
@@ -88,4 +54,4 @@ add_executable(fake_fpga
 )
 target_include_directories(fake_fpga PRIVATE include)
 target_link_libraries(fake_fpga PRIVATE CLI11::CLI11 spdlog::spdlog)
->>>>>>> feature
+
