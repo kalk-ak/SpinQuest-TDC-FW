@@ -1,5 +1,3 @@
-#ifndef DEBUG
-
 #include "UniqueFD.h"
 
 // check header for details
@@ -45,5 +43,3 @@ int UniqueFD::release()
     fd = -1;
     return temp;
 }
-
-#endif // !DEBUG

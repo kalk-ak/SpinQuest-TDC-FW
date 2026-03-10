@@ -13,7 +13,7 @@ int main(int argc, char **argv)
     CLI::App app{"Fake FPGA Client - Particle Spill Simulator"};
     bool verbose = false; // Set logging level to debug if verbose flag is passed
 
-    std::string ip = "666.6.6.7";
+    std::string ip = "127.0.0.1";
     int port = 6767;
     std::string proto = "tcp";
     double frequency_mhz = 4.0;

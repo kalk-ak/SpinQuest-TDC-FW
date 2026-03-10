@@ -1,5 +1,5 @@
-#ifndef DEFINED_UTILITES_H
-#define DEFINED_UTILITES_H
+#ifndef DEFINED_UTILITIES_H
+#define DEFINED_UTILITIES_H
 
 #include "UniqueFD.h"
 #include <filesystem>

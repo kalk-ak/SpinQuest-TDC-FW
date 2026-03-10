@@ -11,7 +11,7 @@
 #include <sys/un.h>
 #include <unistd.h> // For close()
 
-#include "defined_utilites.h"
+#include "defined_utilities.h"
 #include "fake_fpga_client.h"
 
 // Constructor
@@ -63,6 +63,9 @@ FakeFPG::FakeFPG(const std::string id, const std::string ip, int port, const std
     spdlog::debug("FPGA {}: Connected to {}:{}", id_, ip_, port_);
 }
 
+// Destructor
+FakeFPG::~FakeFPG() = default;
+
 // --- CORE: The Spill Simulation ---
 // TODO: Implement a feature for unlimited overclock (i.e. ignore the frequency parameter and just
 // send as fast as possible).
@@ -103,7 +106,7 @@ void FakeFPG::run_spill()
         // get the target amount of iterations needed to simulate the spill duration
         // NOTE: Being static_cast to long long because std::chrono::nanoseconds takes a long long
         // as parameter and we want to avoid overflow
-        long long target_iteration = static_cast<long long>(chunks_per_sec * spill_duration_sec_);
+        target_iteration = static_cast<long long>(chunks_per_sec * spill_duration_sec_);
     }
 
     // pre fill the Buffer so that Zero RNG overhead in the tight loop

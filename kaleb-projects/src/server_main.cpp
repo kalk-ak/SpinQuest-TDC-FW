@@ -29,7 +29,7 @@ int main(int argc, char *argv[])
     // ==========================================
     // SERVER CONFIGURATION DEFAULTS
     // ==========================================
-    std::string ip = "666.6.6.7";
+    std::string ip = "127.0.0.1";
     int port = 6767;
     std::string output_dir = "./spill_data";
     std::string network_type_str = "tcp";
