@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <mutex>
 #include <string>
 #include <sys/socket.h>
 #include <thread>
@@ -76,6 +77,7 @@ class DAQServer
 
     // NEW: Tracks the raw socket IDs of the UDP listeners so stop() can wake them up
     std::vector<int> udp_worker_fds_;
+    std::mutex udp_fds_mutex_;
 
     // Preambles to match the FakeFPGA client
     static constexpr uint64_t PREAMBLE_START = 0xAAAAAAAABBBBBBBB;

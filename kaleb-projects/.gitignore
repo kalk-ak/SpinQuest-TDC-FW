@@ -1,0 +1,7 @@
+# Ignore build files
+build/
+
+# unnessary files
+src/server.cpp
+src/send_data.cpp
+src/parseArgs.cpp

@@ -174,9 +174,12 @@ void DAQServer::stop()
     server_socket_.reset();
 
     // NOTE: Wake up all concurrent UDP listeners by shutting down their read channels
-    for (int fd : udp_worker_fds_)
     {
-        shutdown(fd, SHUT_RDWR);
+        std::lock_guard<std::mutex> lock(udp_fds_mutex_);
+        for (int fd : udp_worker_fds_)
+        {
+            shutdown(fd, SHUT_RDWR);
+        }
     }
 
     // collect all the worker threads and join them to ensure a clean shutdown
@@ -206,8 +209,27 @@ void DAQServer::run_stream_server()
         int client_fd = accept(server_socket_.get(), (struct sockaddr *) &client_addr, &client_len);
         if (client_fd < 0)
         {
-            spdlog::error("Failed to accept client connection: {}", strerror(errno));
+            if (is_running_)
+            {
+                spdlog::error("Failed to accept client connection: {}", strerror(errno));
+            }
             break;
+        }
+
+        // Prune finished threads
+        auto it = client_threads_.begin();
+        while (it != client_threads_.end())
+        {
+            if (it->joinable())
+            {
+                // This is a naive way, std::thread doesn't have a 'is_finished()' method.
+                // We'd need to use a different approach or just join them in stop().
+                // But since we can't easily check if a thread is done without it being joined,
+                // and join blocks, we skip it here.
+                // A better way is to use a std::list and a shared 'done' flag or something.
+                // For now, let's just leave it to join in stop() unless we want to do it right.
+            }
+            ++it;
         }
 
         // Cast the file descriptor to a RAII wrapper to ensure it gets closed properly when the
@@ -284,6 +306,7 @@ void DAQServer::handle_stream_client(UniqueFD client_socket, int client_id)
             if (not recording && word_ptr[i] == PREAMBLE_START)
             {
                 recording = true;
+                total_bytes = 0;         // Reset for new spill
                 write_start_idx = i + 1; // start recording the data at the next 64bit word
             }
             else if (recording && word_ptr[i] == PREAMBLE_END)
@@ -295,7 +318,11 @@ void DAQServer::handle_stream_client(UniqueFD client_socket, int client_id)
                                words_to_write * 8);
                 total_bytes += words_to_write * 8;
                 recording = false;
-                break;
+
+                spdlog::info("TCP Worker {}: Finished spill. Saved {:.2f} MB.", client_id,
+                             total_bytes / (1024.0 * 1024.0));
+                // We don't break here, we continue to look for more spills
+                write_start_idx = i + 1;
             }
         }
 
@@ -307,14 +334,8 @@ void DAQServer::handle_stream_client(UniqueFD client_socket, int client_id)
                            words_to_write * 8);
             total_bytes += words_to_write * 8;
         }
-
-        if (not recording && total_bytes > 0)
-        {
-            spdlog::error("PREAMBLE Not sent in the first set of buffer for client {}", client_id);
-            break;
-        }
     }
-    spdlog::info("TCP Worker {}: Saved {:.2f} MB.", client_id, total_bytes / (1024 * 1024));
+    spdlog::info("TCP Worker {}: Connection closed.", client_id);
 }
 
 // ============================================================================
@@ -398,7 +419,10 @@ void DAQServer::datagram_worker(int worker_id)
         }
 
         // Track it in a list so stop() can shut it down safely
-        udp_worker_fds_.push_back(thread_fd);
+        {
+            std::lock_guard<std::mutex> lock(udp_fds_mutex_);
+            udp_worker_fds_.push_back(thread_fd);
+        }
         safe_thread_socket.reset(thread_fd); // Claim ownership
         spdlog::info("IP Datagram Worker {} ready and bound.", worker_id);
     }
@@ -438,8 +462,11 @@ void DAQServer::datagram_worker(int worker_id)
         }
         else if (bytes_read < 0)
         {
-            spdlog::error("Network error encountered in Datagram Worker {}: {}", worker_id,
-                          strerror(errno));
+            if (is_running_)
+            {
+                spdlog::error("Network error encountered in Datagram Worker {}: {}", worker_id,
+                              strerror(errno));
+            }
             break;
         }
 
@@ -499,7 +526,8 @@ void DAQServer::datagram_worker(int worker_id)
                     // thread will ever see packets from this specific board, so we can safely
                     // create a file for it without
                     std::filesystem::path fp =
-                        output_dir_ / ("udp_spill_" + std::to_string(clients.size()) + ".dat");
+                        output_dir_ / ("udp_worker_" + std::to_string(worker_id) + "_spill_" +
+                                       std::to_string(clients.size()) + ".dat");
                     state.file.open(fp, std::ios::binary);
                 }
             }

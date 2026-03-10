@@ -1,5 +1,5 @@
 #include "CLI/CLI.hpp" // Used for parsing command line arguments
-#include "defined_utilites.h"
+#include "defined_utilities.h"
 #include <arpa/inet.h>
 #include <cassert>
 #include <iostream>
@@ -131,7 +131,7 @@ UniqueFD create_connection(const std::string &ip, const int port, const std::str
         spdlog::error("Using ipv6 socket.");
 
         // convert IP6 address to binary form
-        if (inet_pton(internet_type, ip.c_str(), &ip_addr4.sin_addr) <= 0)
+        if (inet_pton(internet_type, ip.c_str(), &ip_addr6.sin6_addr) <= 0)
         {
             spdlog::error("Invalid address for ipv6 \n");
             std::exit(1);
