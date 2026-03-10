@@ -222,12 +222,16 @@ void DAQServer::run_stream_server()
         {
             if (it->joinable())
             {
-                // This is a naive way, std::thread doesn't have a 'is_finished()' method.
-                // We'd need to use a different approach or just join them in stop().
-                // But since we can't easily check if a thread is done without it being joined,
-                // and join blocks, we skip it here.
-                // A better way is to use a std::list and a shared 'done' flag or something.
-                // For now, let's just leave it to join in stop() unless we want to do it right.
+                // GEMINI made
+                // FIX: here. Before we were just skipping it and leaving it to join in
+                // stop() but that could lead to a large number of finished threads sitting around
+                // in the list. So now we join it here to clean it up immediately. This way we don't
+                // have a large backlog of finished threads sitting around in the list. This is a
+                // naive way, std::thread doesn't have a 'is_finished()' method. We'd need to use a
+                // different approach or just join them in stop(). But since we can't easily check
+                // if a thread is done without it being joined, and join blocks, we skip it here. A
+                // better way is to use a std::list and a shared 'done' flag or something. For now,
+                // let's just leave it to join in stop() unless we want to do it right.
             }
             ++it;
         }
@@ -553,6 +557,9 @@ void DAQServer::datagram_worker(int worker_id)
             state.total_bytes += words_to_write * 8;
         }
     }
+
+    // OLD Comment down from here. Fuck it decided to use Mutex because Gemini told me so. The safer
+    // the better i Guess
 
     // INFO: How Thread Safety is Guaranteed Without Mutexes
     // -------------------------------------------------------------------------
