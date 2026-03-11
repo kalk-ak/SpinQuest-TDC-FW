@@ -95,7 +95,7 @@ The simulator mimics real hardware by sending a start preamble, a stream of rand
 
 ## 🔬 System Architecture
 
-### UDP Load Balancing (The Secret Sauce)
+### UDP Load Balancing
 
 Unlike traditional UDP servers that use a single socket and a bottlenecked dispatcher, this system uses `SO_REUSEPORT`.
 
