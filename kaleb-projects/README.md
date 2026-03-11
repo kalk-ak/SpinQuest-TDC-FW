@@ -46,7 +46,7 @@ This will generate two executables in the `build/` directory:
 
 ## 🖥️ Usage: DAQ Server
 
-The server listens for incoming "spills"—bursts of 64-bit data packets framed by specific preambles.
+The server listens for incoming spillb bursts of 64-bit data packets framed by specific preambles.
 
 ### Basic Command
 

@@ -5,3 +5,6 @@ build/
 src/server.cpp
 src/send_data.cpp
 src/parseArgs.cpp
+
+
+data/
