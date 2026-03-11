@@ -26,7 +26,7 @@ A high performance Data Acquisition system designed to simulate a receive and lo
 
 ```bash
 # Clone the repository
-git clone <https://github.com/kalk-ak/SpinQuest-TDC-FW/tree/master/>
+git clone https://github.com/kalk-ak/SpinQuest-TDC-FW/tree/master/
 cd kaleb-projects
 
 # Create build directory
