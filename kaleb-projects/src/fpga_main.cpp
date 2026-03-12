@@ -17,6 +17,7 @@ int main(int argc, char **argv)
     int port = 6767;
     std::string proto = "tcp";
     double frequency_mhz = 4.0;
+    std::string domain = "ipv4";
 
     // New Concurrency Arguments
     int num_boards = 1;
@@ -31,6 +32,8 @@ int main(int argc, char **argv)
     app.add_option("-b,--boards", num_boards, "Number of concurrent boards to simulate");
     app.add_option("--names", names_file, "Path to text file containing board names");
     app.add_flag("-v,--verbose", verbose, "Enable verbose debug logging");
+    app.add_flag("-d,--domain-socket", domain, "Domain Socket Type (unix/ipv4/ipv6)")
+        ->check(CLI::IsMember({"unix", "ipv4", "ipv6"}));
 
     CLI11_PARSE(app, argc, argv);
 
@@ -38,6 +41,23 @@ int main(int argc, char **argv)
     if (verbose)
     {
         spdlog::set_level(spdlog::level::debug);
+    }
+
+    int internet_type;
+    if (domain == "unix")
+    {
+        spdlog::debug("Using UNIX domain socket");
+        internet_type = AF_UNIX;
+    }
+    else if (domain == "ipv4")
+    {
+        spdlog::debug("Using IPv4 socket");
+        internet_type = AF_INET;
+    }
+    else if (domain == "ipv6")
+    {
+        internet_type = AF_INET6;
+        spdlog::debug("Using IPv6 socket");
     }
 
     try
@@ -107,12 +127,13 @@ int main(int argc, char **argv)
 
         // Instantiate the boards (Using unique_ptr because FakeFPG cannot be copied)
         std::vector<std::unique_ptr<FakeFPG>> fpga_cluster;
+
         for (const std::string &board_id : final_ids)
         {
 
             // Crate a new FakeFPG instance for each board and add it to the cluster
-            fpga_cluster.push_back(std::make_unique<FakeFPG>(board_id, ip, port, proto, AF_INET,
-                                                             4.0, frequency_mhz, 1024LL));
+            fpga_cluster.push_back(std::make_unique<FakeFPG>(
+                board_id, ip, port, proto, internet_type, 4.0, frequency_mhz, 1024LL));
         }
 
         // Wait for user trigger
