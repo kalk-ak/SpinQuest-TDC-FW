@@ -32,7 +32,7 @@ int main(int argc, char **argv)
     app.add_option("-b,--boards", num_boards, "Number of concurrent boards to simulate");
     app.add_option("--names", names_file, "Path to text file containing board names");
     app.add_flag("-v,--verbose", verbose, "Enable verbose debug logging");
-    app.add_flag("-d,--domain-socket", domain, "Domain Socket Type (unix/ipv4/ipv6)")
+    app.add_option("-d,--domain", domain, "Domain Socket Type (unix/ipv4/ipv6)")
         ->check(CLI::IsMember({"unix", "ipv4", "ipv6"}));
 
     CLI11_PARSE(app, argc, argv);
