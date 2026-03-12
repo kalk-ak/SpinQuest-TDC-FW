@@ -89,6 +89,7 @@ The simulator mimics real hardware by sending a start preamble, a stream of rand
 | `-p, --port`    | Server Port                                       | `6767`      |
 | `-n, --network` | Protocol: `tcp` or `udp`                          | `tcp`       |
 | `-f, --freq`    | FPGA Clock Frequency in MHz (0 = unlimited)       | `4.0`       |
+| `-d, --domain`  | Domain type: `ipv4`, `ipv6`, or `unix`            | `ipv4`      |
 | `-b, --boards`  | Number of concurrent boards to simulate           | `1`         |
 | `--names`       | Path to a text file containing unique board names | (Numeric)   |
 | `-v, --verbose` | Enable debug logging                              | `false`     |
