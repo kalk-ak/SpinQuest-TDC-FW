@@ -1,5 +1,5 @@
-#include "CLI/CLI.hpp" // Used for parsing command line arguments
 #include "defined_utilities.h"
+#include "CLI/CLI.hpp" // Used for parsing command line arguments
 #include <arpa/inet.h>
 #include <cassert>
 #include <iostream>
@@ -7,6 +7,7 @@
 #include <spdlog/common.h>
 #include <spdlog/spdlog.h>
 #include <sys/un.h>
+#include <unistd.h>
 
 server_parse_options parse_args(int argc, char *argv[], std::string name)
 {

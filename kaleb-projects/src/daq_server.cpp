@@ -34,11 +34,13 @@ DAQServer::~DAQServer()
 void DAQServer::setup_server_socket()
 {
     // Dynamically uses SOCK_STREAM, SOCK_DGRAM, or AF_UNIX based on user input
+
     int raw_fd = socket(internet_type_, network_type_, 0);
     if (raw_fd < 0)
     {
         throw std::runtime_error("Server socket creation failed");
     }
+    spdlog::debug("Server created socket with FD: {}", raw_fd);
 
     // Wrap the socket ID into a RAII file descriptor manager to ensure it gets closed properly
     server_socket_.reset(raw_fd);
@@ -105,8 +107,8 @@ void DAQServer::setup_server_socket()
         // UNIX File Socket (Does not support reuse port (SO_REUSEPORT))
         memset(&addr_un, 0, sizeof(addr_un));
         addr_un.sun_family = AF_UNIX;
-        strncpy(addr_un.sun_path, ip_.c_str(), sizeof(addr_un.sun_path) - 1);
-        unlink(ip_.c_str());
+        strncpy(addr_un.sun_path, unix_path_.c_str(), sizeof(addr_un.sun_path) - 1);
+        unlink(unix_path_.c_str());
         addr_ptr = (struct sockaddr *) &addr_un;
         addr_len = sizeof(addr_un);
         net_str = "Unix Domain Socket";

@@ -129,6 +129,7 @@ int main(int argc, char **argv)
         // Instantiate the boards (Using unique_ptr because FakeFPG cannot be copied)
         std::vector<std::unique_ptr<FakeFPG>> fpga_cluster;
 
+        spdlog::debug("Initializing {} boards with the following IDs:", num_boards);
         for (const std::string &board_id : final_ids)
         {
 

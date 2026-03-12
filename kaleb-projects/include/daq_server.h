@@ -53,6 +53,9 @@ class DAQServer
     const int internet_type_;
     const int network_type_;
 
+    const std::filesystem::path unix_path_ =
+        "/tmp/fpga_socket"; // Default path for UNIX domain socket
+
     // Path where the spill data files will be saved. Each file will be named "spill_board_X.dat"
     // where X is the client ID.
     const std::filesystem::path output_dir_;
