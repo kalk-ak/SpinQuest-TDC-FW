@@ -43,16 +43,17 @@ int main(int argc, char **argv)
         spdlog::set_level(spdlog::level::debug);
     }
 
+    // get the network type
     int internet_type;
-    if (domain == "unix")
-    {
-        spdlog::debug("Using UNIX domain socket");
-        internet_type = AF_UNIX;
-    }
-    else if (domain == "ipv4")
+    if (domain == "ipv4")
     {
         spdlog::debug("Using IPv4 socket");
         internet_type = AF_INET;
+    }
+    else if (domain == "unix")
+    {
+        spdlog::debug("Using UNIX domain socket");
+        internet_type = AF_UNIX;
     }
     else if (domain == "ipv6")
     {
