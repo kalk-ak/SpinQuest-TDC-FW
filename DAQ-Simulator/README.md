@@ -29,7 +29,7 @@ A high performance Data Acquisition system designed to simulate a receive and lo
 git clone https://github.com/kalk-ak/SpinQuest-TDC-FW.git
 
 # go into my repo
-cd SpinQuest-TDC-FW/kaleb-projects
+cd SpinQuest-TDC-FW/DAQ-Simulator
 
 # Create build directory
 mkdir build && cd build
